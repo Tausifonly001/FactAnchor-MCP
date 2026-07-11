@@ -14,6 +14,8 @@
 - 🔎 **Free Web Fetching** — uses DuckDuckGo's free search + page scraping (no Serper/Google keys).
 - ⚡ **Zero-config setup** — `pip install -e .` + connect your MCP client. Browser auto-installs on first start.
 
+> ⭐ **If FactAnchor-MCP helps you ship more reliable, hallucination-free AI, please consider [starring the repository](https://github.com/Tausifonly001/FactAnchor-MCP).** It takes one click and helps more developers discover a truly zero-cost way to ground their agents. Thank you! 🙏
+
 ---
 
 ## 🚀 1-Minute Quick Start
@@ -241,6 +243,7 @@ Per-OS path examples:
 | File | Purpose |
 |------|---------|
 | `server.py` | The MCP server + `fetch_verified_context` tool (FastMCP). |
+| `crawl_worker.py` | Headless-scrape worker (Crawl4AI) run in an isolated subprocess for robust MCP stdio. |
 | `guardrail.py` | The strict fact-anchoring prompt template. |
 | `text_cleaner.py` | Markdown cleaning + truncation for Crawl4AI output. |
 | `pyproject.toml` | Packaging + `factanchor-mcp` console command. |
