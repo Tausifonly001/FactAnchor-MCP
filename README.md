@@ -67,6 +67,18 @@ Add the **absolute path** to `server.py`:
 
 </details>
 
+### 📥 Post-install: download the browser (required once)
+
+FactAnchor now uses **Crawl4AI**, which drives a headless browser to extract clean, LLM-optimized Markdown. Install the browser binary once after the pip step:
+
+```bash
+crawl4ai-setup
+# If that command isn't on your PATH, run the equivalent:
+python -m playwright install chromium
+```
+
+> macOS/Linux users may also need OS deps: `sudo playwright install-deps chromium` (Debian/Ubuntu). On Windows this is usually unnecessary.
+
 ### 3. Restart your client
 You'll now see the **`fetch_verified_context`** tool available. Ask a factual question and watch the assistant ground its answer in live, cited sources.
 
@@ -224,7 +236,7 @@ Per-OS path examples:
 [Assistant answers ONLY from verified context → ~0% Hallucination]
 ```
 
-1. **Context Fetcher** — `fetch_verified_context(query)` runs a free DuckDuckGo search, then scrapes the top pages and cleans them with BeautifulSoup.
+1. **Context Fetcher** — `fetch_verified_context(query)` runs a free DuckDuckGo search to discover URLs, then **Crawl4AI** scrapes them concurrently into clean, LLM-optimized Markdown (navbars, ads, and footers auto-stripped).
 2. **Guardrail Injection** — the fetched text is wrapped in a strict directive (see `guardrail.py`):
    - Answer **only** from `<verified_context>`.
    - If unanswerable, reply exactly: *"I cannot find a verified source for this information."*
@@ -240,9 +252,9 @@ Per-OS path examples:
 |------|---------|
 | `server.py` | The MCP server + `fetch_verified_context` tool (FastMCP). |
 | `guardrail.py` | The strict fact-anchoring prompt template. |
-| `text_cleaner.py` | HTML/text cleaning + truncation via BeautifulSoup. |
+| `text_cleaner.py` | Markdown cleaning + truncation for Crawl4AI output. |
 | `pyproject.toml` | Packaging + `factanchor-mcp` console command. |
-| `requirements.txt` | Dependencies (`mcp`, `duckduckgo_search`, `beautifulsoup4`, `requests`). |
+| `requirements.txt` | Dependencies (`mcp`, `ddgs`/`duckduckgo_search`, `crawl4ai`). |
 | `claude_desktop_config.example.json` | Copy-paste config snippet. |
 
 ---
@@ -268,8 +280,10 @@ fetch_verified_context(query: str, max_results: int = 3) -> str
 ## 🐛 Troubleshooting
 
 - **`command not found: factanchor-mcp`** → you used Option A but didn't `pip install -e .`, or your venv isn't on PATH. Use Option B (script path) instead.
-- **Empty / "Web fetch failed" context** → DuckDuckGo rate-limited the request. Wait a moment and retry; the tool degrades gracefully rather than crashing.
-- **Tool not appearing in Claude** → restart the client fully after editing the config, and check `Settings → Developer` for errors.
+- **`crawl4ai-setup` / `playwright` errors, or pages return empty** → the headless browser isn't installed. Run `crawl4ai-setup` (or `python -m playwright install chromium`). On Linux also run `sudo playwright install-deps chromium`.
+- **"Browser executable doesn't exist"** → same root cause; the browser binary is missing. Re-run the browser install step above.
+- **Empty / "Web fetch failed" context** → DuckDuckGo rate-limited the request. Wait a moment and retry; the tool degrades gracefully (falls back to search snippets) rather than crashing.
+- **Tool not appearing in client** → restart the client fully after editing the config, and check its MCP/Developer panel for errors.
 
 ---
 

@@ -1,25 +1,18 @@
-"""Clean raw web HTML/text into a compact, readable context snippet."""
+"""Clean Crawl4AI Markdown output into a compact, readable context snippet."""
 
 from __future__ import annotations
 
 import re
 
-from bs4 import BeautifulSoup
 
-
-def clean_html(raw_html: str) -> str:
-    """Strip HTML tags and collapse whitespace into clean plain text."""
-    soup = BeautifulSoup(raw_html, "html.parser")
-    for tag in soup(["script", "style", "noscript", "svg", "iframe"]):
-        tag.decompose()
-    text = soup.get_text(separator=" ")
-    return _collapse_whitespace(text)
-
-
-def _collapse_whitespace(text: str) -> str:
-    text = text.replace("\u00a0", " ")
+def clean_markdown(markdown: str) -> str:
+    """Normalise Crawl4AI Markdown: collapse whitespace, drop noisy blank lines."""
+    if not markdown:
+        return ""
+    text = markdown.replace("\u00a0", " ")
     text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n\s*\n+", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = re.sub(r"^\s*\|.*\|\s*$\n?", "", text, flags=re.MULTILINE)
     return text.strip()
 
 
