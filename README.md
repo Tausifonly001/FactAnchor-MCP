@@ -74,6 +74,143 @@ You'll now see the **`fetch_verified_context`** tool available. Ask a factual qu
 
 ---
 
+## 🧩 Supported Clients (drop-in configs)
+
+FactAnchor-MCP is a **standard MCP server**, so it works with **any MCP-compatible client**. Below are ready-to-paste configs. Every client uses the same two shapes:
+
+- **Option A (recommended):** `"command": "factanchor-mcp"` — needs `pip install -e .` (so the command is on your PATH).
+- **Option B (path-based):** `"command": "python"` + `"args": ["/abs/path/server.py"]` — use this if the `factanchor-mcp` command isn't found.
+
+<details open>
+<summary>💬 Claude Desktop</summary>
+
+File: `claude_desktop_config.json` (Settings → Developer → Edit Config)
+
+```json
+{
+  "mcpServers": {
+    "FactAnchor-MCP": { "command": "factanchor-mcp" }
+  }
+}
+```
+Restart Claude Desktop. Tool appears in the tools list.
+
+</details>
+
+<details open>
+<summary>🖥️ opencode</summary>
+
+File: `.opencode.jsonc` (project root)
+
+```jsonc
+{
+  "mcpServers": {
+    "FactAnchor-MCP": { "command": "factanchor-mcp" }
+  }
+}
+```
+Verify with `/mcp` — `fetch_verified_context` should be listed.
+
+</details>
+
+<details open>
+<summary>⌨️ Claude Code / Kimi Code / Qwen Code / Cline / Roo Code</summary>
+
+These are Claude-Code-style clients. Use a project `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "FactAnchor-MCP": { "command": "factanchor-mcp" }
+  }
+}
+```
+
+Or add it from the CLI (runs the same server):
+
+```bash
+claude mcp add factanchor -- factanchor-mcp
+# Kimi/Qwen/Cline equivalents use the same `mcp add` subcommand
+```
+
+</details>
+
+<details open>
+<summary>🌀 Cursor</summary>
+
+File: `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project)
+
+```json
+{
+  "mcpServers": {
+    "FactAnchor-MCP": { "command": "factanchor-mcp" }
+  }
+}
+```
+Enable it in **Settings → MCP** and restart Cursor.
+
+</details>
+
+<details open>
+<summary>📝 VS Code (Copilot / MCP extension)</summary>
+
+File: `.vscode/mcp.json` (note: VS Code uses a `"servers"` key)
+
+```json
+{
+  "servers": {
+    "FactAnchor-MCP": {
+      "type": "stdio",
+      "command": "factanchor-mcp"
+    }
+  }
+}
+```
+Open the Command Palette → **MCP: List Servers** to confirm it's connected.
+
+</details>
+
+<details open>
+<summary>🌟 Gemini CLI / Antigravity (Google)</summary>
+
+File: `.gemini/settings.json`
+
+```json
+{
+  "mcpServers": {
+    "FactAnchor-MCP": { "command": "factanchor-mcp" }
+  }
+}
+```
+Or: `gemini mcp add factanchor -- factanchor-mcp`
+
+</details>
+
+<details open>
+<summary>🔧 Generic MCP client (path-based fallback)</summary>
+
+If the `factanchor-mcp` command isn't on your PATH, use the absolute path to `server.py` on every client above:
+
+```json
+{
+  "mcpServers": {
+    "FactAnchor-MCP": {
+      "command": "python",
+      "args": ["/absolute/path/to/FactAnchor-MCP/server.py"]
+    }
+  }
+}
+```
+
+Per-OS path examples:
+- **Windows:** `"C:\\Users\\you\\FactAnchor-MCP\\server.py"`
+- **macOS:** `"/Users/you/FactAnchor-MCP/server.py"`
+- **Linux:** `"/home/you/FactAnchor-MCP/server.py"`
+
+</details>
+
+---
+
 ## 🛠️ How It Works
 
 ```
