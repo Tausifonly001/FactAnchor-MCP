@@ -12,7 +12,7 @@
 - 💸 **₹0 Hosting Cost** — runs entirely on your machine. No cloud, no paid API keys.
 - 🛡️ **Strict Guardrails** — the LLM must cite sources or say *"I cannot find a verified source for this information."*
 - 🔎 **Free Web Fetching** — uses DuckDuckGo's free search + page scraping (no Serper/Google keys).
-- ⚡ **1-Minute Setup** — clone, install, point your config at it, done.
+- ⚡ **Zero-config setup** — `pip install -e .` + connect your MCP client. Browser auto-installs on first start.
 
 ---
 
@@ -67,21 +67,11 @@ Add the **absolute path** to `server.py`:
 
 </details>
 
-### 📥 Post-install: download the browser (required once)
-
-FactAnchor now uses **Crawl4AI**, which drives a headless browser to extract clean, LLM-optimized Markdown. Install the browser binary once after the pip step:
-
-```bash
-crawl4ai-setup
-# If that command isn't on your PATH, run the equivalent:
-python -m playwright install chromium
-```
-
-> macOS/Linux users may also need OS deps: `sudo playwright install-deps chromium` (Debian/Ubuntu). On Windows this is usually unnecessary.
-
 ### 3. Restart your client
 You'll now see the **`fetch_verified_context`** tool available. Ask a factual question and watch the assistant ground its answer in live, cited sources.
 
+> ✅ **Zero-config:** on first launch, FactAnchor silently installs the Playwright Chromium browser in the background. No `crawl4ai-setup` or manual browser commands required.
+>
 > 💡 Want `uv` instead of pip? `uv pip install -e .` works identically, and the `factanchor-mcp` command lands on your PATH.
 
 ---
@@ -280,9 +270,9 @@ fetch_verified_context(query: str, max_results: int = 3) -> str
 ## 🐛 Troubleshooting
 
 - **`command not found: factanchor-mcp`** → you used Option A but didn't `pip install -e .`, or your venv isn't on PATH. Use Option B (script path) instead.
-- **`crawl4ai-setup` / `playwright` errors, or pages return empty** → the headless browser isn't installed. Run `crawl4ai-setup` (or `python -m playwright install chromium`). On Linux also run `sudo playwright install-deps chromium`.
-- **"Browser executable doesn't exist"** → same root cause; the browser binary is missing. Re-run the browser install step above.
-- **Empty / "Web fetch failed" context** → DuckDuckGo rate-limited the request. Wait a moment and retry; the tool degrades gracefully (falls back to search snippets) rather than crashing.
+- **Pages return only short snippets (first run)** → Chromium is still installing in the background. Wait ~1–2 minutes and retry; subsequent runs are instant.
+- **"Browser executable doesn't exist" on Linux** → install OS deps once: `sudo playwright install-deps chromium` (or `sudo apt install libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libgbm1 libasound2`).
+- **Rate-limit system note from the tool** → DuckDuckGo is throttling free search. Wait a few minutes and retry. The server never crashes; it returns a clean system note for the LLM.
 - **Tool not appearing in client** → restart the client fully after editing the config, and check its MCP/Developer panel for errors.
 
 ---
