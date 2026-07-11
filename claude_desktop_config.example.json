@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "FactAnchor-MCP": {
+      "command": "factanchor-mcp"
+    }
+  }
+}

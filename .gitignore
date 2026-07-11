@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# MCP / OS
+.DS_Store
+*.log
+.claude_desktop_config.json
+mcp-debug/
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+.idea/

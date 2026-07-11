@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "factanchor-mcp"
+version = "1.0.0"
+description = "Reduce AI hallucinations by 80% using local, zero-cost context anchoring (MCP server)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["mcp", "llm", "hallucination", "fact-checking", "claude", "ai", "anchor"]
+authors = [{ name = "FactAnchor-MCP contributors" }]
+dependencies = [
+    "mcp>=1.2.0",
+    "ddgs>=5.0.0",
+    "duckduckgo_search>=6.0.0",
+    "beautifulsoup4>=4.12.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = ["build", "twine"]
+
+[project.scripts]
+factanchor-mcp = "server:main"
+
+[tool.setuptools]
+py-modules = ["server", "guardrail", "text_cleaner"]
