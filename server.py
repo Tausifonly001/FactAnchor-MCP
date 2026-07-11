@@ -10,6 +10,7 @@ automatically on first start. See README.md for the 1-minute quick start.
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 import sys
 import threading
@@ -19,6 +20,15 @@ from mcp.server.fastmcp import FastMCP
 import guardrail
 import text_cleaner
 
+# Prevent the headless browser (and other child processes) from inheriting the
+# stdio file descriptors. Without this, MCP over stdio deadlocks/corrupts
+# because the browser holds the server's stdout pipe open.
+for _fd in (0, 1, 2):
+    try:
+        os.set_inheritable(_fd, False)
+    except OSError:
+        pass
+
 RATE_LIMIT_NOTE = (
     "[System Note: The search provider is temporarily rate-limiting requests. "
     "Please inform the user to try again in a few minutes, or use cached data.]"
@@ -27,8 +37,30 @@ RATE_LIMIT_NOTE = (
 mcp = FastMCP("FactAnchor-MCP")
 
 
+def _chromium_installed() -> bool:
+    """Best-effort check whether a Playwright Chromium build already exists."""
+    try:
+        base = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+        if not base:
+            base = os.path.join(os.path.expanduser("~"), ".cache", "ms-playwright")
+        if not os.path.isdir(base):
+            base = os.path.join(
+                os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "ms-playwright"
+            )
+        if not os.path.isdir(base):
+            return False
+        return any(
+            d.startswith("chromium") and os.path.isdir(os.path.join(base, d))
+            for d in os.listdir(base)
+        )
+    except Exception:
+        return False
+
+
 def _ensure_browser_silent() -> None:
     """Install Playwright Chromium if missing. Never crash the server."""
+    if _chromium_installed():
+        return
     try:
         subprocess.run(
             [sys.executable, "-m", "playwright", "install", "chromium"],
@@ -44,7 +76,9 @@ def _ensure_browser_silent() -> None:
 def _start_browser_setup() -> None:
     """Fire-and-forget browser install so MCP stdio startup is not blocked."""
     try:
-        thread = threading.Thread(target=_ensure_browser_silent, daemon=True, name="factanchor-browser-setup")
+        thread = threading.Thread(
+            target=_ensure_browser_silent, daemon=True, name="factanchor-browser-setup"
+        )
         thread.start()
     except Exception:
         pass
@@ -85,7 +119,7 @@ async def fetch_verified_context(query: str, max_results: int = 3) -> str:
 
     urls = [url for _title, url, _snippet in sources if url]
     try:
-        texts = await _scrape(urls) if urls else {}
+        texts = await asyncio.to_thread(_crawl, urls) if urls else {}
     except Exception:
         texts = {}
 
@@ -159,55 +193,45 @@ def _search(query: str, max_results: int) -> list[tuple[str, str, str]] | None:
     return []
 
 
-async def _scrape(urls: list[str]) -> dict[str, str]:
+def _crawl(urls: list[str]) -> dict[str, str]:
     """Scrape URLs concurrently with Crawl4AI into clean Markdown.
 
-    Returns {url: cleaned_markdown}. Falls back to DuckDuckGo snippets at the
-    call site when a page fails or Crawl4AI is unavailable. Never raises.
+    Delegates to a SEPARATE worker process (crawl_worker.py) so the headless
+    browser's event loop / stdio never touch this MCP server's stdio pipe.
+    This sidesteps a cross-framework (anyio vs Playwright) deadlock that
+    would otherwise hang the tool over stdio transport.
+
+    Returns {url: cleaned_markdown}. Never raises.
     """
+    import json
+    import subprocess
+
+    worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crawl_worker.py")
     try:
-        from crawl4ai import (
-            AsyncWebCrawler,
-            BrowserConfig,
-            CacheMode,
-            CrawlerRunConfig,
+        proc = subprocess.run(
+            [sys.executable, worker, json.dumps(urls)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            timeout=120,
+            check=False,
         )
-    except ImportError:
+    except Exception:
+        return {}
+
+    if not proc.stdout:
         return {}
 
     try:
-        browser_cfg = BrowserConfig(headless=True, verbose=False)
-        run_cfg = CrawlerRunConfig(cache_mode=CacheMode.BYPASS, magic=True)
-        async with AsyncWebCrawler(config=browser_cfg) as crawler:
-            results = await crawler.arun_many(urls, config=run_cfg)
+        raw = json.loads(proc.stdout)
     except Exception:
         return {}
 
     out: dict[str, str] = {}
-    try:
-        for url, res in zip(urls, results):
-            if getattr(res, "success", False):
-                md = _extract_markdown(res)
-                if md:
-                    out[url] = text_cleaner.clean_markdown(
-                        text_cleaner.truncate(md, max_chars=2500)
-                    )
-    except Exception:
-        return out
+    for url, md in raw.items():
+        if md:
+            out[url] = text_cleaner.clean_markdown(text_cleaner.truncate(md, max_chars=2500))
     return out
-
-
-def _extract_markdown(result) -> str:
-    """Pull the best Markdown variant from a Crawl4AI CrawlResult."""
-    for attr in ("fit_markdown", "markdown"):
-        val = getattr(result, attr, None)
-        if isinstance(val, str) and val.strip():
-            return val
-        if hasattr(val, "fit_markdown") and getattr(val, "fit_markdown", ""):
-            return val.fit_markdown
-        if hasattr(val, "raw_markdown") and getattr(val, "raw_markdown", ""):
-            return val.raw_markdown
-    return ""
 
 
 def main() -> None:
