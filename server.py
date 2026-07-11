@@ -37,30 +37,14 @@ RATE_LIMIT_NOTE = (
 mcp = FastMCP("FactAnchor-MCP")
 
 
-def _chromium_installed() -> bool:
-    """Best-effort check whether a Playwright Chromium build already exists."""
-    try:
-        base = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
-        if not base:
-            base = os.path.join(os.path.expanduser("~"), ".cache", "ms-playwright")
-        if not os.path.isdir(base):
-            base = os.path.join(
-                os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "ms-playwright"
-            )
-        if not os.path.isdir(base):
-            return False
-        return any(
-            d.startswith("chromium") and os.path.isdir(os.path.join(base, d))
-            for d in os.listdir(base)
-        )
-    except Exception:
-        return False
-
-
 def _ensure_browser_silent() -> None:
-    """Install Playwright Chromium if missing. Never crash the server."""
-    if _chromium_installed():
-        return
+    """Install Playwright Chromium (idempotent). Never crash the server.
+
+    Always runs; `playwright install` is a no-op when the build already
+    matches, so this is safe to call on every startup and guarantees the
+    exact Chromium build Crawl4AI expects is present (avoiding a version
+    mismatch that a loose "already installed?" check could miss).
+    """
     try:
         subprocess.run(
             [sys.executable, "-m", "playwright", "install", "chromium"],
