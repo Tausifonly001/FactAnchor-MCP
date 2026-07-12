@@ -11,10 +11,49 @@
 
 - 💸 **₹0 Hosting Cost** — runs entirely on your machine. No cloud, no paid API keys.
 - 🛡️ **Strict Guardrails** — the LLM must cite sources or say *"I cannot find a verified source for this information."*
-- 🔎 **Free Web Fetching** — uses DuckDuckGo's free search + page scraping (no Serper/Google keys).
+- 🔎 **Hybrid Search** — Tavily → Serper → DuckDuckGo fallback (free by default, optionally faster with API keys).
+- 🧠 **Smart Chunking** — BM25 semantic relevance scoring keeps only the most useful paragraphs.
+- 💾 **Persistent Cache** — SQLite disk cache (`~/.factanchor/cache.db`) survives server restarts.
 - ⚡ **Zero-config setup** — `pip install -e .` + connect your MCP client. Browser auto-installs on first start.
 
 > ⭐ **If FactAnchor-MCP helps you ship more reliable, hallucination-free AI, please consider [starring the repository](https://github.com/Tausifonly001/FactAnchor-MCP).** It takes one click and helps more developers discover a truly zero-cost way to ground their agents. Thank you! 🙏
+
+---
+
+## 🔑 Optional API Keys (for faster search)
+
+FactAnchor-MCP works out-of-the-box with **free DuckDuckGo search**. For faster, more reliable results, you can optionally provide commercial search API keys:
+
+| Env Variable | Provider | Free Tier | Setup |
+|-------------|----------|-----------|-------|
+| `TAVILY_API_KEY` | [Tavily](https://tavily.com) | 1000 searches/month | Sign up → copy API key |
+| `SERPER_API_KEY` | [Serper](https://serper.dev) | 2500 searches/month | Sign up → copy API key |
+| *(none needed)* | DuckDuckGo | Unlimited | Works by default |
+
+**Priority order:** Tavily → Serper → DuckDuckGo. If no keys are set, DuckDuckGo is used automatically.
+
+Set keys in your environment:
+```bash
+# Windows (PowerShell)
+$env:TAVILY_API_KEY = "tvly-..."
+
+# macOS / Linux
+export TAVILY_API_KEY="tvly-..."
+```
+
+Or add them to your MCP client config:
+```json
+{
+  "mcpServers": {
+    "FactAnchor-MCP": {
+      "command": "factanchor-mcp",
+      "env": {
+        "TAVILY_API_KEY": "tvly-..."
+      }
+    }
+  }
+}
+```
 
 ---
 
@@ -221,20 +260,32 @@ Per-OS path examples:
 [Claude Desktop / Cursor / VS Code]
        │ (Asks a factual query)
        ▼
-[FactAnchor MCP Server] ───► [Free DuckDuckGo Search + Page Scrape] (Live Facts)
-       │                                            │
-       │ (Injects Strict Guardrail + Verified Text) │ (Returns Raw Text)
-       ▼                                            ◀
+[FactAnchor MCP Server]
+       │
+       ├──► [Hybrid Search: Tavily → Serper → DuckDuckGo] (URL Discovery)
+       │
+       ├──► [Persistent Cache: ~/.factanchor/cache.db] (Fast Repeat Queries)
+       │
+       ├──► [Crawl4AI in Isolated Subprocess] (Page Scraping)
+       │
+       ├──► [BM25 Semantic Chunking] (Smart Paragraph Selection)
+       │
+       └──► [Strict Guardrail Injection] (Verified Context Block)
+              │
+              ▼
 [Assistant answers ONLY from verified context → ~0% Hallucination]
 ```
 
-1. **Context Fetcher** — `fetch_verified_context(query)` runs a free DuckDuckGo search to discover URLs, then **Crawl4AI** scrapes them concurrently into clean, LLM-optimized Markdown (navbars, ads, and footers auto-stripped).
-2. **Guardrail Injection** — the fetched text is wrapped in a strict directive (see `guardrail.py`):
+1. **Hybrid Search** — `fetch_verified_context(query)` tries Tavily (if `TAVILY_API_KEY` set), then Serper (if `SERPER_API_KEY` set), then falls back to free DuckDuckGo search to discover URLs.
+2. **Persistent Caching** — results are cached in `~/.factanchor/cache.db` (SQLite) for 24 hours, so repeat queries return instantly even after server restarts.
+3. **Page Scraping** — **Crawl4AI** runs in an isolated subprocess (`crawl_worker.py`) to scrape discovered URLs into clean, LLM-optimized Markdown (navbars, ads, and footers auto-stripped).
+4. **Semantic Chunking** — BM25 relevance scoring extracts only the paragraphs most relevant to your query, maximizing information density within the context window.
+5. **Guardrail Injection** — the fetched text is wrapped in a strict directive (see `guardrail.py`):
    - Answer **only** from `<verified_context>`.
    - If unanswerable, reply exactly: *"I cannot find a verified source for this information."*
    - Cite every claim in brackets like `[Source: ...]`.
    - Never fall back to pre-trained knowledge.
-3. **Local-Only** — the server uses the `stdio` transport, so all processing stays on your machine.
+6. **Local-Only** — the server uses the `stdio` transport, so all processing stays on your machine.
 
 ---
 
@@ -244,6 +295,9 @@ Per-OS path examples:
 |------|---------|
 | `server.py` | The MCP server + `fetch_verified_context` tool (FastMCP). |
 | `crawl_worker.py` | Headless-scrape worker (Crawl4AI) run in an isolated subprocess for robust MCP stdio. |
+| `search_backends.py` | Hybrid search: Tavily → Serper → DuckDuckGo fallback. |
+| `disk_cache.py` | Persistent SQLite cache (`~/.factanchor/cache.db`) for repeat queries. |
+| `semantic_chunker.py` | BM25 relevance scoring to extract the most useful paragraphs. |
 | `guardrail.py` | The strict fact-anchoring prompt template. |
 | `text_cleaner.py` | Markdown cleaning + truncation for Crawl4AI output. |
 | `pyproject.toml` | Packaging + `factanchor-mcp` console command. |

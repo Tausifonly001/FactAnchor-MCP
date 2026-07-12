@@ -2,9 +2,10 @@
 in fetched, verified web text using strict guardrail prompting.
 
 Web fetching uses Crawl4AI (LLM-optimized, async, strips navs/ads/footers)
-and URL discovery uses free DuckDuckGo search. Runs locally (no cloud
-hosting). Zero-config: the Playwright Chromium browser is installed
-automatically on first start. See README.md for the 1-minute quick start.
+and URL discovery uses hybrid search (Tavily → Serper → DuckDuckGo).
+Runs locally (no cloud hosting). Zero-config: the Playwright Chromium
+browser is installed automatically on first start.
+See README.md for the 1-minute quick start.
 """
 
 from __future__ import annotations
@@ -19,7 +20,10 @@ from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
 
+import disk_cache
 import guardrail
+import search_backends
+import semantic_chunker
 import text_cleaner
 
 # NOTE: We deliberately do NOT call os.set_inheritable(0,1,2, False) here.
@@ -142,11 +146,11 @@ async def fetch_verified_context(query: str, max_results: int = 3) -> str:
     """Fetch real, source-of-truth web text for a topic and wrap it in a
     strict fact-anchoring guardrail so the LLM answers ONLY from it.
 
-    Uses free DuckDuckGo search to discover URLs, then Crawl4AI to scrape
-    them into clean LLM-optimized Markdown. Answer the user strictly from
-    the returned <verified_context> block and follow the embedded STRICT
-    RULES (never guess, cite sources in brackets, do not use pre-trained
-    knowledge for missing info).
+    Uses hybrid search (Tavily → Serper → DuckDuckGo) to discover URLs,
+    then Crawl4AI to scrape them into clean LLM-optimized Markdown.
+    Answer the user strictly from the returned <verified_context> block
+    and follow the embedded STRICT RULES (never guess, cite sources in
+    brackets, do not use pre-trained knowledge for missing info).
 
     Args:
         query: The factual topic or question to ground.
@@ -154,10 +158,19 @@ async def fetch_verified_context(query: str, max_results: int = 3) -> str:
     """
     try:
         count = max(1, min(int(max_results), 5))
+
+        # Check in-memory cache first (hot)
         cache_key = (query, count)
         cached = _cache_get(cache_key)
         if cached is not None:
             return cached
+
+        # Check persistent disk cache (warm)
+        cached = disk_cache.disk_get(query, count)
+        if cached is not None:
+            _cache_set(cache_key, cached)  # promote to in-memory
+            return cached
+
         sources = await asyncio.to_thread(_search, query, count)
     except Exception:
         return RATE_LIMIT_NOTE
@@ -193,62 +206,27 @@ async def fetch_verified_context(query: str, max_results: int = 3) -> str:
         return RATE_LIMIT_NOTE
 
     combined = "\n\n========\n\n".join(blocks)
-    combined = text_cleaner.truncate(combined, max_chars=40000)
+
+    # Semantic chunking: extract most relevant paragraphs for the query
+    combined = await asyncio.to_thread(
+        semantic_chunker.extract_relevant, combined, query, 40000
+    )
+
     result = guardrail.build_guardrail(combined)
+
+    # Persist to disk cache (survives restarts)
     _cache_set(cache_key, result)
+    disk_cache.disk_set(query, count, result)
     return result
 
 
 def _search(query: str, max_results: int) -> list[tuple[str, str, str]] | None:
-    """Return (title, url, snippet) tuples, or None on rate-limit/provider failure.
+    """Return (title, url, snippet) tuples, or None on total failure.
 
-    Tries resilient free backends in order (duckduckgo HTML-style first when
-    available, then auto / wikipedia / brave). Never raises — returns None so
-    the tool can emit RATE_LIMIT_NOTE.
+    Uses hybrid search: Tavily (if TAVILY_API_KEY set) → Serper (if
+    SERPER_API_KEY set) → DuckDuckGo (free, rate-limited).
     """
-    try:
-        from ddgs import DDGS
-    except ImportError:
-        try:
-            from duckduckgo_search import DDGS
-        except ImportError:
-            return [(
-                "search library missing",
-                "",
-                "(Install a search backend: `pip install ddgs` or `pip install duckduckgo_search`)",
-            )]
-
-    # Prefer HTML-style DuckDuckGo first (most rate-limit resilient), then
-    # free fallbacks. Older packages accept "html"/"lite"; newer ddgs uses
-    # named engines like "duckduckgo", "auto", "wikipedia".
-    backends = ("html", "lite", "duckduckgo", "auto", "wikipedia", "brave")
-    last_error: Exception | None = None
-
-    for backend in backends:
-        try:
-            out: list[tuple[str, str, str]] = []
-            with DDGS() as ddgs:
-                try:
-                    results = ddgs.text(query, max_results=max_results, backend=backend)
-                except TypeError:
-                    results = ddgs.text(query, max_results=max_results)
-                for r in results or []:
-                    out.append(
-                        (
-                            (r.get("title") or "").strip(),
-                            (r.get("href") or "").strip(),
-                            (r.get("body") or "").strip(),
-                        )
-                    )
-            if out:
-                return out
-        except Exception as exc:
-            last_error = exc
-            continue
-
-    if last_error is not None:
-        return None
-    return []
+    return search_backends.search(query, max_results)
 
 
 def _crawl(urls: list[str]) -> dict[str, str]:
