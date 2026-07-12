@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "factanchor-mcp"
 version = "1.0.1"
-description = "Reduce AI hallucinations by 80% using local, zero-cost context anchoring (MCP server)."
+description = "Reduce AI hallucinations by up to ~80% (informal estimate) using local, zero-cost context anchoring (MCP server)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

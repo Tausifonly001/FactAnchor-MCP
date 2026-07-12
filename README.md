@@ -1,6 +1,6 @@
 # 🔗 FactAnchor-MCP
 
-> **Reduce AI Hallucinations by ~80% using Local Context Anchoring.**
+> **Reduce AI Hallucinations by up to ~80% (informal estimate) using Local Context Anchoring.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org)
@@ -287,17 +287,24 @@ fetch_verified_context(query: str, max_results: int = 3) -> str
 
 ---
 
+## 📊 Evaluation
+
+The "~80%" figure is an **informal estimate**. A small, hand-runnable eval
+set lives in [`eval/sample_queries.json`](eval/sample_queries.json) — see
+[`eval/README.md`](eval/README.md) for how to reproduce it. Contributions of
+more queries (or a CI assertion) are very welcome.
+
 ## 🤝 Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Keep it **zero-cost** and **local-first**.
 
 ## 📋 Success Metrics (v1.0)
 
-- ✅ **~80%** reduction in made-up facts during test queries.
+> ⚠️ **Honesty note:** The "~80% reduction" is an **informal estimate** from manual testing against a small set of factual queries (see [`eval/sample_queries.json`](eval/sample_queries.json)) — it is **not** a benchmarked or statistically validated result. The guardrail is a *prompt directive*, not a hard infrastructure constraint, so an LLM can occasionally drift from it in long conversations. FactAnchor reduces hallucination but does not eliminate it; always verify critical claims against the cited sources.
+
+- 🧪 **Up to ~80%** fewer made-up facts observed in informal test queries.
 - ✅ **<3 min** user setup time (clone → install → config).
 - ✅ **₹0.00** server maintenance bill.
-
-> ⚠️ FactAnchor reduces hallucination but does not eliminate it. Always verify critical claims against the cited sources.
 
 ## 📜 License
 

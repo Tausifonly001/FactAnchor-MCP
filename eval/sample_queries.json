@@ -1,0 +1,32 @@
+[
+  {
+    "query": "What is the capital of France?",
+    "expect_grounded": true,
+    "expected_snippet": "Paris"
+  },
+  {
+    "query": "What is the speed of light in a vacuum?",
+    "expect_grounded": true,
+    "expected_snippet": "299792458"
+  },
+  {
+    "query": "Who wrote the novel Frankenstein?",
+    "expect_grounded": true,
+    "expected_snippet": "Mary Shelley"
+  },
+  {
+    "query": "In what year did World War II end?",
+    "expect_grounded": true,
+    "expected_snippet": "1945"
+  },
+  {
+    "query": "What is the chemical symbol for gold?",
+    "expect_grounded": true,
+    "expected_snippet": "Au"
+  },
+  {
+    "query": "Tell me about the completely made-up programming language ZxQ-99 and its unique async model.",
+    "expect_grounded": false,
+    "expected_behavior": "Tool should return the rate-limit/system note or 'I cannot find a verified source' rather than inventing facts."
+  }
+]
