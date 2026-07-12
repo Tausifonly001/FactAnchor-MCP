@@ -14,36 +14,98 @@ import os
 import subprocess
 import sys
 import threading
+import time
+from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
 
 import guardrail
 import text_cleaner
 
-# Prevent the headless browser (and other child processes) from inheriting the
-# stdio file descriptors. Without this, MCP over stdio deadlocks/corrupts
-# because the browser holds the server's stdout pipe open.
-for _fd in (0, 1, 2):
-    try:
-        os.set_inheritable(_fd, False)
-    except OSError:
-        pass
+# NOTE: We deliberately do NOT call os.set_inheritable(0,1,2, False) here.
+# The headless browser is fully isolated in a separate worker process
+# (crawl_worker.py, whose stdio is never shared with this server), so the
+# MCP stdio pipe cannot be held open by the browser. Marking stdio
+# non-inheritable globally would also make the pipes we create for the
+# worker non-inheritable on Windows and break stdin delivery.
 
 RATE_LIMIT_NOTE = (
     "[System Note: The search provider is temporarily rate-limiting requests. "
     "Please inform the user to try again in a few minutes, or use cached data.]"
 )
 
+# --- simple in-memory TTL cache (keyed on query + result count) ----------
+_CACHE: dict[tuple, tuple[float, str]] = {}
+_CACHE_TTL = 300  # seconds
+
+
+def _cache_get(key: tuple) -> str | None:
+    item = _CACHE.get(key)
+    if item is not None and (time.time() - item[0]) < _CACHE_TTL:
+        return item[1]
+    _CACHE.pop(key, None)
+    return None
+
+
+def _cache_set(key: tuple, value: str) -> None:
+    _CACHE[key] = (time.time(), value)
+    if len(_CACHE) > 100:  # keep the cache bounded
+        oldest = sorted(_CACHE.items(), key=lambda kv: kv[1][0])[0][0]
+        _CACHE.pop(oldest, None)
+
+
+def _is_safe_url(url: str) -> bool:
+    """Reject non-http(s) schemes and private/loopback/metadata addresses (SSRF)."""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
+    if host in ("localhost", "0.0.0.0", "::1") or host.endswith(".localhost"):
+        return False
+    if host == "169.254.169.254":  # cloud metadata endpoint
+        return False
+    if host.startswith("127.") or host.startswith("10."):
+        return False
+    if host.startswith("192.168."):
+        return False
+    if host.startswith("172."):  # private range 172.16.0.0/12
+        try:
+            second = int(host.split(".")[1])
+        except (ValueError, IndexError):
+            return False
+        if not (16 <= second <= 31):
+            return False
+    return True
+
+
+def _browser_already_installed() -> bool:
+    """Accurately detect whether Playwright's Chromium is present.
+
+    Uses Playwright's own API (not a loose directory scan) so we never skip
+    an install when the exact required build is missing.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as p:
+            path = p.chromium.executable_path
+            return bool(path) and os.path.isfile(path)
+    except Exception:
+        return False
+
+
 mcp = FastMCP("FactAnchor-MCP")
 
 
 def _ensure_browser_silent() -> None:
-    """Install Playwright Chromium (idempotent). Never crash the server.
-
-    Always runs; `playwright install` is a no-op when the build already
-    matches, so this is safe to call on every startup and guarantees the
-    exact Chromium build Crawl4AI expects is present.
-    """
+    """Install Playwright Chromium if missing. Never crash the server."""
+    if _browser_already_installed():
+        return
     try:
         result = subprocess.run(
             [sys.executable, "-m", "playwright", "install", "chromium"],
@@ -92,6 +154,10 @@ async def fetch_verified_context(query: str, max_results: int = 3) -> str:
     """
     try:
         count = max(1, min(int(max_results), 5))
+        cache_key = (query, count)
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
         sources = await asyncio.to_thread(_search, query, count)
     except Exception:
         return RATE_LIMIT_NOTE
@@ -105,7 +171,7 @@ async def fetch_verified_context(query: str, max_results: int = 3) -> str:
             "Treat the topic as unverified.)"
         )
 
-    urls = [url for _title, url, _snippet in sources if url]
+    urls = [url for _title, url, _snippet in sources if url and _is_safe_url(url)]
     try:
         texts = await asyncio.to_thread(_crawl, urls) if urls else {}
     except Exception:
@@ -113,6 +179,8 @@ async def fetch_verified_context(query: str, max_results: int = 3) -> str:
 
     blocks: list[str] = []
     for title, url, snippet in sources:
+        if not _is_safe_url(url):
+            continue
         body = texts.get(url) or snippet
         if not body:
             continue
@@ -126,7 +194,9 @@ async def fetch_verified_context(query: str, max_results: int = 3) -> str:
 
     combined = "\n\n========\n\n".join(blocks)
     combined = text_cleaner.truncate(combined, max_chars=40000)
-    return guardrail.build_guardrail(combined)
+    result = guardrail.build_guardrail(combined)
+    _cache_set(cache_key, result)
+    return result
 
 
 def _search(query: str, max_results: int) -> list[tuple[str, str, str]] | None:
@@ -197,10 +267,10 @@ def _crawl(urls: list[str]) -> dict[str, str]:
     worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crawl_worker.py")
     try:
         proc = subprocess.run(
-            [sys.executable, worker, json.dumps(urls)],
+            [sys.executable, worker],
+            input=json.dumps(urls).encode("utf-8"),
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL,
             timeout=120,
             check=False,
         )

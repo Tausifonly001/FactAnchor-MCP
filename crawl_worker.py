@@ -41,7 +41,7 @@ async def _run(urls: list[str]) -> dict:
 
 
 def main() -> None:
-    urls = json.loads(sys.argv[1])
+    urls = json.loads(sys.stdin.read())
     try:
         out = asyncio.run(_run(urls))
     except Exception:

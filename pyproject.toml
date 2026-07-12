@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["build", "twine"]
+dev = ["build", "twine", "pytest"]
 legacy-search = ["duckduckgo_search>=6.0.0"]
 
 [project.scripts]
