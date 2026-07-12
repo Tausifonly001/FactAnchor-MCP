@@ -1,6 +1,5 @@
 """Tests for search_backends, disk_cache, and semantic_chunker."""
 
-import os
 import tempfile
 import time
 
@@ -13,48 +12,13 @@ import semantic_chunker
 
 def test_search_ddg_returns_results():
     """DuckDuckGo search should return at least one result for a common query."""
-    results = search_backends._search_ddg("Python programming language", 2)
+    results = search_backends.search("Python programming language", 2)
     assert results is not None
     assert len(results) >= 1
     for title, url, snippet in results:
         assert isinstance(title, str)
         assert isinstance(url, str)
         assert isinstance(snippet, str)
-
-
-def test_search_tavily_without_key_returns_none():
-    """Tavily should return None when no API key is set."""
-    old = os.environ.pop("TAVILY_API_KEY", None)
-    try:
-        assert search_backends._search_tavily("test", 1) is None
-    finally:
-        if old is not None:
-            os.environ["TAVILY_API_KEY"] = old
-
-
-def test_search_serper_without_key_returns_none():
-    """Serper should return None when no API key is set."""
-    old = os.environ.pop("SERPER_API_KEY", None)
-    try:
-        assert search_backends._search_serper("test", 1) is None
-    finally:
-        if old is not None:
-            os.environ["SERPER_API_KEY"] = old
-
-
-def test_unified_search_falls_back_to_ddg():
-    """Unified search should fall through to DDG when no API keys are set."""
-    old_t = os.environ.pop("TAVILY_API_KEY", None)
-    old_s = os.environ.pop("SERPER_API_KEY", None)
-    try:
-        results = search_backends.search("Python programming language", 2)
-        assert results is not None
-        assert len(results) >= 1
-    finally:
-        if old_t is not None:
-            os.environ["TAVILY_API_KEY"] = old_t
-        if old_s is not None:
-            os.environ["SERPER_API_KEY"] = old_s
 
 
 # --- disk_cache tests ---
