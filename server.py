@@ -42,19 +42,23 @@ def _ensure_browser_silent() -> None:
 
     Always runs; `playwright install` is a no-op when the build already
     matches, so this is safe to call on every startup and guarantees the
-    exact Chromium build Crawl4AI expects is present (avoiding a version
-    mismatch that a loose "already installed?" check could miss).
+    exact Chromium build Crawl4AI expects is present.
     """
     try:
-        subprocess.run(
+        result = subprocess.run(
             [sys.executable, "-m", "playwright", "install", "chromium"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=600,
             check=False,
         )
-    except Exception:
-        pass
+        if result.returncode != 0:
+            sys.stderr.write(
+                "[FactAnchor-MCP] Browser setup warning: `playwright install "
+                f"chromium` exited with code {result.returncode}.\n"
+            )
+    except Exception as exc:
+        sys.stderr.write(f"[FactAnchor-MCP] Browser setup failed: {exc}\n")
 
 
 def _start_browser_setup() -> None:
@@ -121,7 +125,7 @@ async def fetch_verified_context(query: str, max_results: int = 3) -> str:
         return RATE_LIMIT_NOTE
 
     combined = "\n\n========\n\n".join(blocks)
-    combined = text_cleaner.truncate(combined, max_chars=6000)
+    combined = text_cleaner.truncate(combined, max_chars=40000)
     return guardrail.build_guardrail(combined)
 
 
@@ -214,7 +218,7 @@ def _crawl(urls: list[str]) -> dict[str, str]:
     out: dict[str, str] = {}
     for url, md in raw.items():
         if md:
-            out[url] = text_cleaner.clean_markdown(text_cleaner.truncate(md, max_chars=2500))
+            out[url] = text_cleaner.clean_markdown(text_cleaner.truncate(md, max_chars=10000))
     return out
 
 
